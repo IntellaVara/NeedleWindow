@@ -1,0 +1,35 @@
+Tab: [2304.07919] Chain of Thought Prompt Tuning in Vision Language Models at https://arxiv.org/abs/2304.07919
+Tab: 2305.15021v2.pdf at https://arxiv.org/pdf/2305.15021
+Tab: [2305.15408] Towards Revealing the Mystery behind Chain of Thought: A Theoretical Perspective at https://arxiv.org/abs/2305.15408
+Tab: 2405.15071v2.pdf at https://arxiv.org/pdf/2405.15071
+Tab: 2305.15408v5.pdf at https://arxiv.org/pdf/2305.15408
+Tab: [2311.09193] The Role of Chain-of-Thought in Complex Vision-Language Reasoning Task at https://arxiv.org/abs/2311.09193
+Tab: [2309.07915] MMICL: Empowering Vision-language Model with Multi-Modal In-Context Learning at https://arxiv.org/abs/2309.07915
+Tab: [2401.02582] CoCoT: Contrastive Chain-of-Thought Prompting for Large Multimodal Models with Multiple Image Inputs at https://arxiv.org/abs/2401.02582
+Tab: 2402.12195v1.pdf at https://arxiv.org/pdf/2402.12195
+Tab: [2402.12058] Scaffolding Coordinates to Promote Vision-Language Coordination in Large Multi-Modal Models at https://arxiv.org/abs/2402.12058
+Tab: [2403.12488] DetToolChain: A New Prompting Paradigm to Unleash Detection Ability of MLLM at https://arxiv.org/abs/2403.12488
+Tab: 2405.13872v2.pdf at https://arxiv.org/pdf/2405.13872
+Tab: 2404.09797v1.pdf at https://arxiv.org/pdf/2404.09797
+Tab: 2403.12488v2.pdf at https://arxiv.org/pdf/2403.12488
+Tab: 2402.12058v1.pdf at https://arxiv.org/pdf/2402.12058
+Tab: 2405.16473v1.pdf at https://arxiv.org/pdf/2405.16473
+Tab: 2402.13577v1.pdf at https://arxiv.org/pdf/2402.13577
+Tab: 2311.09193v1.pdf at https://arxiv.org/pdf/2311.09193
+Tab: [2405.18512] Understanding Transformer Reasoning Capabilities via Graph Algorithms at https://arxiv.org/abs/2405.18512
+Tab: 2403.12801v1.pdf at https://arxiv.org/pdf/2403.12801
+Tab: 2403.11220v3.pdf at https://arxiv.org/pdf/2403.11220v3
+Tab: The Hunger Games Sequels Pitch Meeting - YouTube at https://www.youtube.com/watch?v=tIzZ5uRvcFE&ab_channel=ScreenRant
+Tab: Quantum at https://chatgpt.com/c/7bc4c272-5d91-4717-b5cc-ef61d5adc5bc
+Tab: openai whisper api pricing - Google Search at https://www.google.com/search?client=ubuntu&channel=fs&q=openai+whisper+api+pricing
+Tab: Introducing ChatGPT and Whisper APIs | OpenAI at https://openai.com/index/introducing-chatgpt-and-whisper-apis/
+Tab: API model whisper - Real cost - API - OpenAI Developer Forum at https://community.openai.com/t/api-model-whisper-real-cost/469816/19
+Tab: ChatGPT at https://chatgpt.com/c/f0ab46f7-d0f0-4a39-8d85-0af28b5e4245
+Tab: Debugging - Runtime / this-firefox at about:debugging#/runtime/this-firefox
+Tab: leg extension machine proper form - Google Search at https://www.google.com/search?client=ubuntu&hs=JDp&sca_esv=44a09aed9e2edf4e&channel=fs&q=leg+extension+machine+proper+form&tbm=vid&source=lnms&prmd=ivsnmbt&sa=X&ved=2ahUKEwjm0_-107qGAxURO0QIHZ67BBgQ0pQJegQIFxAB&biw=2488&bih=1299&dpr=1
+Tab: The RIGHT Way To Use The Leg Extension For Big Quads! (FIX YOUR FORM!) - YouTube at https://www.youtube.com/watch?v=tTbJBUKnWU8&ab_channel=MindPumpTV
+Tab: How To: Leg Extension (Cybex) - YouTube at https://www.youtube.com/watch?v=YyvSfVjQeL0&ab_channel=ScottHermanFitness
+Tab: How To Do Leg Extensions With Perfect Technique (Grow Every Quad Head) - YouTube at https://www.youtube.com/watch?v=ljO4jkwv8wQ&ab_channel=JeffNippard
+Tab: 2309.04902v1.pdf at https://arxiv.org/pdf/2309.04902
+Tab: 2402.03752v1.pdf at https://arxiv.org/pdf/2402.03752
+
