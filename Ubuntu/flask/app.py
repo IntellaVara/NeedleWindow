@@ -123,7 +123,7 @@ def receive_page_data():
         pages_data[str(tab_id)] = page_content
 
         print(f"Total pages received: {len(pages_data)}")
-        print("Recently added page content with Tab ID {tab_id}:\n", page_content)
+        print(f"Recently added page content with Tab ID {tab_id}:\n", page_content)
 
         return jsonify({"status": "success", "message": "Data received"}), 200
     except Exception as e:

@@ -91,28 +91,45 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 
 browser.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
-    let key = `${tabId}_${tab.url}`;
-    if (changeInfo.status === 'complete' && (tab.url.endsWith('.pdf') || tab.url.includes('/pdf'))) {
-        if (!processedUrls.has(key)) {
-            console.log(`Processing PDF in tab ID ${tabId} with URL ${tab.url}`);
-            console.log(`Title of the tab: ${tab.title}`);
-            processedUrls.set(key, true);
+    if (changeInfo.status === 'complete') {
+        let key = `${tabId}_${tab.url}`;
 
-            // Prepare PDF info to send to the server
-            const pageInfo = {
-                type: 'pdf',
-                url: tab.url,
-                title: tab.title,
-                tabId: tabId
-            };
-
-            sendDataToServer(pageInfo);
-        } else {
-            console.log(`Already processed tab ID ${tabId} with URL ${tab.url}`);
-            console.log(`Title of the tab: ${tab.title}`);
+        // Check if it's a PDF or HTML and process accordingly
+        if (tab.url.endsWith('.pdf') || tab.url.includes('/pdf')) {
+            if (!processedUrls.has(key)) {
+                console.log(`Processing PDF in tab ID ${tabId} with URL ${tab.url}`);
+                const pageInfo = {
+                    type: 'pdf',
+                    url: tab.url,
+                    title: tab.title,
+                    tabId: tabId
+                };
+                sendDataToServer(pageInfo);
+                processedUrls.set(key, true);
+            }
+        } else {  // Assuming it's HTML
+            if (!processedUrls.has(key)) {
+                console.log(`Processing HTML in tab ID ${tabId} with URL ${tab.url}`);
+                // Use executeScript to get HTML content directly
+                browser.tabs.executeScript(tabId, {code: 'document.documentElement.innerHTML'}).then(results => {
+                    if (results && results[0]) {
+                        const pageHTML = results[0];
+                        const pageInfo = {
+                            type: 'html',
+                            url: tab.url,
+                            html: pageHTML,
+                            tabId: tabId
+                        };
+                        sendDataToServer(pageInfo);
+                        processedUrls.set(key, true);
+                    }
+                }).catch(err => console.error('Error retrieving HTML content:', err));
+            }
         }
     }
 });
+
+
 
 
 function sendDataToServer(pageInfo) {
