@@ -1,4 +1,6 @@
-<img src="images/needle_window.jpg" width="512" height="512" alt="Needle Window">
+<div align="center">
+    <img src="images/needle_window.jpg" width="512" height="512" alt="Needle Window">
+</div>
 
 
 # NeedleWindow
@@ -15,10 +17,51 @@ Works with PDFs. Other convenience features also planned.
 # Installation
 ## Ubuntu
 
+### Step 1: Ensure Conda is installed on your system
+```bash
+conda --version
+```
+If Conda is not installed, follow the installation instructions for your OS from the official Conda documentation.
+
+### Step 2: Clone the GitHub repository to your local machine
+```bash
+git clone https://github.com/IntellaVara/NeedleWindow.git
+cd NeedleWindow
+```
+### Step 3: Create a Conda environment using the provided environment.yml file
+```bash
+conda env create -f environment.yml
+```
+
+### Step 4: Activate the newly created environment
+```bash
+conda activate needle_window
+```
+
+### Step 4a: Get Firefox Extension & or Chrome
+<link>
+<link>
+
+
+### Step 5: Set executable permissions for the launch script
+```bash
+chmod +x launch.sh
+```
+
+### Step 6: Run the launch script
+```bash
+./launch.sh
+```
+
 
 ## Windows
+Coming soon!
+
+## Mac
+Contributions welcome!
 
 # Security Concerns
+Oh my there are so many! (Detailed and paranoid doc incoming)
 
 
 ## To-Do List
@@ -26,6 +69,6 @@ Works with PDFs. Other convenience features also planned.
 - [ ] Ubuntu Chrome
 - [ ] Windows Firefox
 - [ ] Windows Chrome
-- [ ] Compose document on security risks and mitigations
+- [ ] Compose readme on security risks
 
 
