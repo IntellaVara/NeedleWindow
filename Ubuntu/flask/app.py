@@ -1,67 +1,35 @@
 from flask import Flask, request, jsonify
-
+import requests
+import PyPDF2
+import os
 from flask_socketio import SocketIO, emit
 import subprocess
 import re 
 from bs4 import BeautifulSoup  # Import BeautifulSoup
 
 from langchain_community.llms import Ollama
-from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains import create_retrieval_chain
-from langchain.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import PromptTemplate
+from langchain_community.embeddings import HuggingFaceEmbeddings
+
 
 from pydantic import BaseModel, Field
 
 import json
 
-llm = Ollama(model="llama3:instruct")
-embedding = FastEmbedEmbeddings()
 
-# umm...
-vector_store = Chroma.from_texts([""], embedding)
-vector_store.delete_collection()
-vector_store = Chroma.from_texts([""], embedding)
-
-
-retriever = vector_store.as_retriever(search_type="similarity_score_threshold", 
-                                      search_kwargs={"k":10,
-                                                     "score_threshold":0.1,}
-                                                     )
-
-# Define your desired data structure for text matching.
-class TextMatch(BaseModel):
-    #match_found: bool = Field(description="Whether an exact match was found")
-    title: str = Field(description="The html tag title of the text document")
-    id: str = Field(description="The id of the text document")
-    
-# Set up a parser + inject instructions into the prompt template.
-parser = JsonOutputParser(pydantic_object=TextMatch)
-
-prompt = PromptTemplate(
-    template="{format_instructions} \n Please check if the user query is in any of the context items." \
-         " If there is an exact matching context item, please return its title html tag contents only." \
-         " ONLY GIVE THE TOP MATCH."\
-         " ONLY PROVIDE THE JSON OUTPUT." \
-         " ANSWER BRIEFLY." \
-         " DO NOT FORGET THE ID." \
-         " only reply with the FULL AND COMPLETE <title> </title> of the matched context item IF IT IS A GOOD MATCH. " \
-         " Return \"title\" : \"none\" if there are no incredibly STRONGLY RELEVANT matches." \
-         " Context: {context}" \
-         " \n\nQuery: {input}\n" \
-         ,
-         
-    input_variables=["context", "input"],
-    partial_variables={"format_instructions": parser.get_format_instructions()},
+model_name = "sentence-transformers/all-mpnet-base-v2"
+model_kwargs = {'device': 'cuda'}
+encode_kwargs = {'normalize_embeddings': False}
+hf_emb = HuggingFaceEmbeddings(
+    model_name=model_name,
+    model_kwargs=model_kwargs,
+    encode_kwargs=encode_kwargs
 )
 
-
-document_chain = create_stuff_documents_chain(llm, prompt)
-chain = create_retrieval_chain(retriever, document_chain)
-
+# what is this nonsense?
+vector_store = Chroma.from_texts([""], hf_emb)
+vector_store.delete_collection()
+vector_store = Chroma.from_texts([""], hf_emb)
 
 
 app = Flask(__name__)
@@ -71,7 +39,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 pages_data = {}  # Array to store page data
 
 
-query_prompt = "Leg Workout big quads"
+query_prompt = ""
 
 
 
@@ -80,40 +48,78 @@ def receive_page_data():
     print("Firing receive_page_data")
     try:
         data = request.get_json()
-        html_content = data['html']
-        tab_id = data['tabId']  # Retrieve the tab ID sent from the extension
-        print("\n\n tab_id:", tab_id)
-        soup = BeautifulSoup(html_content, 'html.parser')
+        page_type = data['type']
+        tab_id = data['tabId']
+        url = data['url']
+        print("\n\nTab ID:", tab_id)
 
-        # Start building the page content string
-        page_content = ""
+        print("page_type:", page_type)
+        
+        # Initialize page content string
+        page_content = f"<id>{tab_id}</id>\n"
+        
+        if page_type == 'html':
+            html_content = data['html']
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # Extract title
+            title_content = soup.title
+            if title_content:
+                page_content += f"<title>{title_content.text.strip()}</title>\n"
+            else:
+                page_content += "<title>Not found</title>\n"
 
-        page_content += f"<id>{tab_id}</id>\n"
+            # Extract headers
+            for tag in ['h1', 'h2', 'h3']:
+                headers = soup.find_all(tag, limit=3)
+                for header in headers:
+                    header_text = f"<{header.name}>{header.text.strip()[:200]}</{header.name}>"
+                    page_content += header_text + "\n"
 
-        # Extract and append the title with HTML tags
-        title_content = soup.title
-        if title_content:
-            page_content += f"<title>{title_content.text.strip()}</title>\n"
-        else:
-            page_content += "<title>Not found</title>\n"
- 
-        # Extract and append the first three h1, h2, h3 headers, each enclosed in their respective tags
-        for tag in ['h1', 'h2', 'h3']:
-            headers = soup.find_all(tag, limit=3)  # Limit to the first 3 headers of each type
-            for header in headers:
-                header_text = f"<{header.name}>{header.text.strip()[:200]}</{header.name}>"
-                page_content += header_text + "\n"
+            # Extract paragraphs
+            paragraphs = soup.find_all('p', limit=5)
+            for index, paragraph in enumerate(paragraphs):
+                paragraph_text = f"<p>{paragraph.text.strip()[:200]}</p>"
+                page_content += paragraph_text + "\n"
+        
+        # elif page_type == 'pdf':
+        #     pdf_text = data['text']
+        #     pdf_title = data['title'] if 'title' in data else 'PDF Document'
+        #     page_content += f"<title>{pdf_title}</title>\n"
+        #     page_content += f"{pdf_text}\n"
 
-        # Extract and append the first five paragraphs, each enclosed in <p> tags
-        paragraphs = soup.find_all('p', limit=5)
-        for index, paragraph in enumerate(paragraphs):
-            paragraph_text = f"<p>{paragraph.text.strip()[:200]}</p>"  # Enclose in paragraph tags
-            page_content += paragraph_text + "\n"
+       
+        elif page_type == 'pdf':
+            # Download PDF
+            response = requests.get(url)
+            pdf_path = f"/tmp/{tab_id}.pdf"  # Temp path for the PDF
+            with open(pdf_path, 'wb') as f:
+                f.write(response.content)
+
+            # Extract text from PDF
+            pdf_text = []
+            with open(pdf_path, "rb") as f:
+                reader = PyPDF2.PdfReader(f)
+                num_pages = min(3, len(reader.pages))  # Limit to the first 3 pages
+                for i in range(num_pages):
+                    page = reader.pages[i]
+                    text = page.extract_text() or ''
+                    words = text.split()
+                    pdf_text.append(' '.join(words[:200]))  # Only first 200 words per page
+
+            os.remove(pdf_path)  # Clean up the downloaded file
+
+            # Join the extracted text with two newlines and prepare the title
+            pdf_text_combined = '\n\n'.join(filter(None, pdf_text))
+            pdf_title = data.get('title', 'PDF Document')
+            page_content += f"<title>{pdf_title}</title>\n{pdf_text_combined}\n"
+            page_content += f"<id>{tab_id}</id>\n"
+
 
         # Add the content to the vector store with the tab ID as identifier
         vector_store.add_texts([page_content], ids=[str(tab_id)])
 
-        # Append the formatted page content string to a local data store, if needed
+        # Append the formatted page content string to a local data store
         pages_data[str(tab_id)] = page_content
 
         print(f"Total pages received: {len(pages_data)}")
@@ -207,36 +213,35 @@ def find_matching_tab():
     user_query = data['query']
     print("\n\nUser query:", user_query)
 
-    # Assuming 'chain' is already set up and ready to be used
-    response = chain.invoke({"input": user_query})
-    print("Response:", response)
-
     try:
-        # Using regex to extract ID from response; assumes ID is always a number
-        match = re.search(r'"id"\s*:\s*"(\d+)"', response['answer'])
-        if match:
-            tab_id = match.group(1)
-            print("Extracted Tab ID:", tab_id)
+        # Perform a similarity search in the vector store
+        search_results = vector_store.similarity_search(user_query, k=3)
 
-            if tab_id in pages_data:
-                page_content = pages_data[tab_id]
-                # Extract title from page_content using regex
-                title_match = re.search(r'<title>(.*?)</title>', page_content)
-                title = title_match.group(1) if title_match else 'None'
+        # Filter results to find the top matching tab, if any
+        if search_results:
+            top_result = search_results[0]  # Assuming the first result is the best match
+            # Extract ID and title from the very end of the formatted page content
+            tab_id_match = re.search(r'<id>(\d+)</id>\s*$', top_result.page_content, re.MULTILINE)
+            title_match = re.search(r'<title>(.*?)</title>\s*$', top_result.page_content, re.MULTILINE)
+
+            if tab_id_match and title_match:
+                tab_id = tab_id_match.group(1)
+                title = title_match.group(1)
+
+                print("Extracted Tab ID:", tab_id)
                 print("Extracted title:", title)
 
-                if title != 'None':
-                    emit('activate_matching_tab', {'title': title}, namespace='/', broadcast=True)
-                    return jsonify({"status": "success", "message": "Matching tab activation attempted.", "title": title}), 200
-                else:
-                    return jsonify({"status": "success", "message": "No matching tab found."}), 200
+                # Emit event to activate the matching tab
+                emit('activate_matching_tab', {'title': title}, namespace='/', broadcast=True)
+                return jsonify({"status": "success", "message": "Matching tab activation attempted.", "title": title}), 200
             else:
-                return jsonify({"status": "error", "message": "No content found for the given Tab ID."}), 404
+                return jsonify({"status": "error", "message": "Unable to extract tab ID or title from document."}), 400
         else:
-            return jsonify({"status": "error", "message": "Tab ID not found in response."}), 404
+            return jsonify({"status": "success", "message": "No matching document found."}), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 
 def focus_firefox_window_by_title(title_from_extension):

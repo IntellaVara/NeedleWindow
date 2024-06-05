@@ -1,3 +1,8 @@
+
+
+
+const processedUrls = new Map();
+
 // Assuming the Socket.IO client is loaded from `socket.io.min.js` as configured in `manifest.json`
 var socket = io('http://localhost:5000', {transports: ['websocket'], upgrade: false});
 
@@ -18,6 +23,12 @@ browser.tabs.onRemoved.addListener(function(tabId, removeInfo) {
     console.log(`Tab with ID ${tabId} has been closed`);
     // Emit an event to the Flask server to remove this tab from the vector store
     socket.emit('remove_tab', {tabId: tabId});
+
+    processedUrls.forEach((value, key) => {
+        if (key.startsWith(`${tabId}_`)) {
+            processedUrls.delete(key);
+        }
+    });
 });
 
 
@@ -77,6 +88,45 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;  // Indicate that we want to send a response asynchronously
     }
 });
+
+
+browser.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
+    let key = `${tabId}_${tab.url}`;
+    if (changeInfo.status === 'complete' && (tab.url.endsWith('.pdf') || tab.url.includes('/pdf'))) {
+        if (!processedUrls.has(key)) {
+            console.log(`Processing PDF in tab ID ${tabId} with URL ${tab.url}`);
+            console.log(`Title of the tab: ${tab.title}`);
+            processedUrls.set(key, true);
+
+            // Prepare PDF info to send to the server
+            const pageInfo = {
+                type: 'pdf',
+                url: tab.url,
+                title: tab.title,
+                tabId: tabId
+            };
+
+            sendDataToServer(pageInfo);
+        } else {
+            console.log(`Already processed tab ID ${tabId} with URL ${tab.url}`);
+            console.log(`Title of the tab: ${tab.title}`);
+        }
+    }
+});
+
+
+function sendDataToServer(pageInfo) {
+    fetch('http://localhost:5000/receive_page_data', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(pageInfo)
+    })
+    .then(response => response.json())
+    .then(data => console.log('Success:', data))
+    .catch((error) => console.error('Error:', error));
+}
 
 
 
