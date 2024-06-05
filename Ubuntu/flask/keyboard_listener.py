@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import simpledialog
 from pynput import keyboard
 import requests
-
+import sys
 
 
 # Function to display the input dialog and return the user input
@@ -22,37 +22,45 @@ def on_activate_h():
         print(f'Response from Flask: {response.text}')
 
 
-# def on_activate_h():
 
-#     # Pop up the input dialog to get the user's query
-#     user_query = get_user_query()
-
-#     print("Ctrl+Shift+H pressed, triggering Flask action.")
-#     url = 'http://localhost:5000/hello'  # Endpoint for a simple Hello World action
-#     response = requests.get(url)
-#     print(f'Response from Flask: {response.text}')
-
-#     url = 'http://localhost:5000/request_tabs'  # Endpoint to request tab information
-#     response = requests.get(url)
-#     print(f'Response from Flask: {response.text}')
-    
-#     # Request to activate the first tab and focus the window
-#     url = 'http://localhost:5000/activate_first_tab'
-#     response = requests.get(url)
-#     print(f'Response from Flask: {response.text}')
-
+def format_hotkey(hotkey_str):
+    """Formats the hotkey string to match pynput's expected format."""
+    # Splitting the input into parts and formatting correctly
+    parts = hotkey_str.split('+')
+    formatted_parts = []
+    for part in parts:
+        part = part.strip().lower()  # Normalize the input
+        if part in ['ctrl', 'shift', 'alt', 'cmd']:
+            formatted_parts.append(f'<{part}>')  # Special keys
+        else:
+            formatted_parts.append(part)  # Regular keys like letters or numbers
+    return '+'.join(formatted_parts)
 
 def for_canonical(f):
+    """Converts a function to work with canonical key values."""
     return lambda k: f(l.canonical(k))
 
-# Define your shortcut key combination here
-hotkey = keyboard.HotKey(
-    keyboard.HotKey.parse('<ctrl>+<shift>+k'),
-    on_activate_h
-)
 
-# The event listener will be running in this block
-with keyboard.Listener(
-        on_press=for_canonical(hotkey.press),
-        on_release=for_canonical(hotkey.release)) as l:
-    l.join()
+def main(hotkey_str):
+    formatted_hotkey = format_hotkey(hotkey_str)  # Ensure hotkey is correctly formatted
+    hotkey = keyboard.HotKey(
+        keyboard.HotKey.parse(formatted_hotkey),
+        on_activate_h
+    )
+    
+    # Define the canonical wrapper within main to have access to 'listener'
+    def for_canonical(f):
+        return lambda k: f(listener.canonical(k))
+    
+    # Event listener setup with the canonical wrapper
+    with keyboard.Listener(
+            on_press=for_canonical(hotkey.press),
+            on_release=for_canonical(hotkey.release)) as listener:
+        listener.join()
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        main(sys.argv[1])
+    else:
+        print("No hotkey specified, using default 'ctrl+shift+k'.")
+        main('ctrl+shift+k')

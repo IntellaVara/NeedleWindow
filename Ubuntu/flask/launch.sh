@@ -11,16 +11,19 @@ cleanup() {
 # Trap signals to cleanup processes
 trap cleanup SIGINT SIGTERM
 
+# Prompt user for hotkey combination
+read -p "Type your preferred hotkey combination (e.g., ctrl+shift+k): " hotkey
+
 # Start the Flask app in the background
 python run.py &
 FLASK_PID=$!
 echo "Flask app started with PID $FLASK_PID"
 
-# Start the keyboard listener in a new terminal
+# Start the keyboard listener in a new terminal with the user's hotkey
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    gnome-terminal --tab -- bash -c 'python keyboard_listener.py; exec bash' &
+    gnome-terminal --tab -- bash -c "python keyboard_listener.py $hotkey; exec bash" &
 elif [[ "$OSTYPE" == "darwin"* ]]; then
-    osascript -e 'tell application "Terminal" to do script "python keyboard_listener.py"' &
+    osascript -e "tell application \"Terminal\" to do script \"python keyboard_listener.py $hotkey\""
 fi
 KEYBOARD_LISTENER_PID=$!
 echo "Keyboard listener started with PID $KEYBOARD_LISTENER_PID"
