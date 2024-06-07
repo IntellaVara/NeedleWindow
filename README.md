@@ -39,12 +39,14 @@ conda activate needle_window
 ```
 
 ### Step 4a: Get Firefox Extension & or Chrome
-<link>
-<link>
+[https://addons.mozilla.org/en-US/firefox/addon/needlewindow-tab-focuser/](https://addons.mozilla.org/en-US/firefox/addon/needlewindow-tab-focuser/)
+
+(Chrome Coming soon!)
 
 
 ### Step 5: Set executable permissions for the launch script
 ```bash
+cd Ubuntu/flask
 chmod +x launch.sh
 ```
 
@@ -53,6 +55,18 @@ chmod +x launch.sh
 ./launch.sh
 ```
 
+### Step 7:
+- Choose GPU (y/n) (you have to type this)
+- Choose gui vs hotkeys (hotkeys use pynput keylogger)
+
+<div align="leftr">
+    <img src="images/GUI.png" alt="Needle Window GUI">
+</div>
+
+If using the GUI:
+N = 1 will automatically choose the most relevant page. If N > 1 the top N relevant results will be clickable.
+
+If using hotkeys it is always N = 1.
 
 ## Windows
 Coming soon!
