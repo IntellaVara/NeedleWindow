@@ -48,25 +48,49 @@ socket.on('request_tabs', function(data) {
 
 
 
+// socket.on('activate_matching_tab', function(data) {
+//     console.log("Attempting to activate matching tab with title:", data.title);
+//     browser.tabs.query({}).then(tabs => {
+//         console.log("All open tab titles:");
+//         tabs.forEach(tab => {
+//             console.log(`Title: ${tab.title}, ID: ${tab.id}`); // More detailed print
+//         });
+
+//         const normalizedDataTitle = data.title.trim().toLowerCase();
+//         const foundTab = tabs.find(tab => tab.title.trim().toLowerCase().includes(normalizedDataTitle));
+//         if (foundTab) {
+//             browser.tabs.update(foundTab.id, {active: true}).then(() => {
+//                 console.log("Matching tab activated:", foundTab.title, "ID:", foundTab.id);
+//                 socket.emit('window_info', {windowId: foundTab.windowId, title: foundTab.title});
+//             });
+//         } else {
+//             console.log("No matching tab found for title:", data.title);
+//         }
+//     }).catch(err => console.error('Error querying tabs:', err));
+// });
+
 socket.on('activate_matching_tab', function(data) {
-    console.log("Attempting to activate matching tab with title:", data.title);
+    console.log("Attempting to activate matching tab with ID:", data.tabId);
     browser.tabs.query({}).then(tabs => {
-        console.log("All open tab titles:");
+        console.log("All open tab titles and IDs:");
         tabs.forEach(tab => {
-            console.log(tab.title); // Print each tab's title for debugging
+            console.log(`Title: ${tab.title}, ID: ${tab.id}`); // Detailed print for debugging
         });
 
-        const foundTab = tabs.find(tab => tab.title.includes(data.title));
+        // Find the tab using the tab ID directly for a more reliable match
+        const foundTab = tabs.find(tab => tab.id === parseInt(data.tabId));
         if (foundTab) {
             browser.tabs.update(foundTab.id, {active: true}).then(() => {
-                console.log("Matching tab activated:", foundTab.title);
+                console.log("Matching tab activated:", foundTab.title, "ID:", foundTab.id);
                 socket.emit('window_info', {windowId: foundTab.windowId, title: foundTab.title});
             });
         } else {
-            console.log("No matching tab found for title:", data.title);
+            console.log("No matching tab found for ID:", data.tabId);
         }
     }).catch(err => console.error('Error querying tabs:', err));
 });
+
+
 
 
 // Listen for messages from the content scripts

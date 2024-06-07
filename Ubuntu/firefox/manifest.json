@@ -1,7 +1,7 @@
 {
     "manifest_version": 2,
     "name": "NeedleWindow - Tab Focuser",
-    "version": "1.0",
+    "version": "1.1",
     "description": "Focuses the tab in conjunction with the flask app",
     "permissions": [
         "tabs",

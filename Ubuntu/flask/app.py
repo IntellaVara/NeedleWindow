@@ -6,42 +6,62 @@ from flask_socketio import SocketIO, emit
 import subprocess
 import re 
 from bs4 import BeautifulSoup  # Import BeautifulSoup
+from threading import Thread
+
+import signal
 
 from langchain_community.llms import Ollama
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
+import argparse
+from tkinter import PhotoImage
 
+
+import tkinter as tk
+from tkinter import simpledialog
+import requests
+from tkinter import font as tkfont  # Import tkinter font module
 
 from pydantic import BaseModel, Field
 
 import json
+import sys
 
-
-model_name = "sentence-transformers/all-mpnet-base-v2"
-model_kwargs = {'device': 'cuda'}
-encode_kwargs = {'normalize_embeddings': False}
-hf_emb = HuggingFaceEmbeddings(
-    model_name=model_name,
-    model_kwargs=model_kwargs,
-    encode_kwargs=encode_kwargs
-)
-
-# what is this nonsense?
-vector_store = Chroma.from_texts([""], hf_emb)
-vector_store.delete_collection()
-vector_store = Chroma.from_texts([""], hf_emb)
 
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+def signal_handler(sig, frame):
+    print('Signal received:', sig)
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+
 pages_data = {}  # Array to store page data
+hf_emb = None
+vector_store = None
 
 
-query_prompt = ""
+# Initialize the language model and vector store based on GPU availability
+def init_lang_components(use_cuda):
+    global hf_emb, vector_store
+    
+    model_kwargs = {'device': 'cuda' if use_cuda else 'cpu'}
+    encode_kwargs = {'normalize_embeddings': False}
+    hf_emb = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-mpnet-base-v2",
+        model_kwargs=model_kwargs,
+        encode_kwargs=encode_kwargs
+    )
 
-
+    # Initialize vector store
+    vector_store = Chroma.from_texts([""], hf_emb)
+    vector_store.delete_collection()
+    vector_store = Chroma.from_texts([""], hf_emb)
 
 @app.route('/receive_page_data', methods=['POST'])
 def receive_page_data():
@@ -207,41 +227,96 @@ def handle_window_info(data):
    
 
 
+# @app.route('/find_matching_tab', methods=['POST'])
+# def find_matching_tab():
+#     data = request.get_json()
+#     user_query = data['query']
+#     top_n = int(data.get('top_n', 1))  # Default to 1 if not provided
+#     print("\n\nUser query:", user_query)
+
+#     try:
+#         # Perform a similarity search in the vector store
+#         search_results = vector_store.similarity_search(user_query, k=top_n)
+
+#         # Filter results to find the top matching tab, if any
+#         if search_results:
+#             top_result = search_results[0]  # Assuming the first result is the best match
+#             # Extract ID and title from the very end of the formatted page content
+#             tab_id_match = re.search(r'<id>(\d+)</id>\s*$', top_result.page_content, re.MULTILINE)
+#             title_match = re.search(r'<title>(.*?)</title>\s*$', top_result.page_content, re.MULTILINE)
+
+#             if tab_id_match and title_match:
+#                 tab_id = tab_id_match.group(1)
+#                 title = title_match.group(1)
+
+#                 print("Extracted Tab ID:", tab_id)
+#                 print("Extracted title:", title)
+
+#                 # Emit event to activate the matching tab
+#                 emit('activate_matching_tab', {'title': title, 'tabId': tab_id}, namespace='/', broadcast=True)
+#                 return jsonify({"status": "success", "message": "Matching tab activation attempted.", "title": title}), 200
+#             else:
+#                 return jsonify({"status": "error", "message": "Unable to extract tab ID or title from document."}), 400
+#         else:
+#             return jsonify({"status": "success", "message": "No matching document found."}), 200
+
+#     except Exception as e:
+#         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
+@app.route('/selected_n_activate', methods=['POST'])
+def selected_n_activate():
+    data = request.get_json()
+    title = data.get('title')
+    tab_id = data.get('tabId')
+    print(f"Activating tab with ID: {tab_id} and title: {title}")
+    
+    # Emit the command to activate the matching tab
+    socketio.emit('activate_matching_tab', {'title': title, 'tabId': tab_id})
+    
+    return jsonify({"status": "success", "message": "Activation attempt sent."})
+
+
+
 @app.route('/find_matching_tab', methods=['POST'])
 def find_matching_tab():
     data = request.get_json()
     user_query = data['query']
+    top_n = int(data.get('top_n', 1))  # Default to 1 if not provided
     print("\n\nUser query:", user_query)
 
     try:
         # Perform a similarity search in the vector store
-        search_results = vector_store.similarity_search(user_query, k=3)
+        search_results = vector_store.similarity_search(user_query, k=top_n)
 
-        # Filter results to find the top matching tab, if any
-        if search_results:
-            top_result = search_results[0]  # Assuming the first result is the best match
-            # Extract ID and title from the very end of the formatted page content
-            tab_id_match = re.search(r'<id>(\d+)</id>\s*$', top_result.page_content, re.MULTILINE)
-            title_match = re.search(r'<title>(.*?)</title>\s*$', top_result.page_content, re.MULTILINE)
-
-            if tab_id_match and title_match:
-                tab_id = tab_id_match.group(1)
-                title = title_match.group(1)
-
-                print("Extracted Tab ID:", tab_id)
-                print("Extracted title:", title)
-
-                # Emit event to activate the matching tab
-                emit('activate_matching_tab', {'title': title}, namespace='/', broadcast=True)
-                return jsonify({"status": "success", "message": "Matching tab activation attempted.", "title": title}), 200
-            else:
-                return jsonify({"status": "error", "message": "Unable to extract tab ID or title from document."}), 400
+        if top_n > 1:
+            # Handle multiple results for GUI display
+            results = []
+            for result in search_results:
+                tab_id_match = re.search(r'<id>(\d+)</id>\s*$', result.page_content, re.MULTILINE)
+                title_match = re.search(r'<title>(.*?)</title>\s*$', result.page_content, re.MULTILINE)
+                if tab_id_match and title_match:
+                    results.append({'tabId': tab_id_match.group(1), 'title': title_match.group(1)})
+            return jsonify({"status": "success", "results": results}), 200
         else:
-            return jsonify({"status": "success", "message": "No matching document found."}), 200
+            # Handle single result for direct activation
+            if search_results:
+                top_result = search_results[0]
+                tab_id_match = re.search(r'<id>(\d+)</id>\s*$', top_result.page_content, re.MULTILINE)
+                title_match = re.search(r'<title>(.*?)</title>\s*$', top_result.page_content, re.MULTILINE)
+                if tab_id_match and title_match:
+                    tab_id = tab_id_match.group(1)
+                    title = title_match.group(1)
+                    emit('activate_matching_tab', {'title': title, 'tabId': tab_id}, namespace='/', broadcast=True)
+                    return jsonify({"status": "success", "message": "Matching tab activation attempted.", "title": title}), 200
+                else:
+                    return jsonify({"status": "error", "message": "Unable to extract tab ID or title from document."}), 400
+            else:
+                return jsonify({"status": "success", "message": "No matching document found."}), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 
 def focus_firefox_window_by_title(title_from_extension):
@@ -269,6 +344,179 @@ def focus_firefox_window_by_title(title_from_extension):
         return f"Error: {str(e)}", 500
 
 
+def run_gui(flask_pid, keyboard_listener_pid=None):
+    """Run the persistent Tkinter GUI for input."""
+    root = tk.Tk()
+    root.title("Query Input")
+
+    # Set the window icon
+    icon_path = '../firefox/icons/icon-128.png'  # Update this path to where your icon is stored
+    icon_image = PhotoImage(file=icon_path)
+    root.iconphoto(True, icon_image)  # The 'True' parameter makes this icon used for all windows if more windows are opened
+
+    root.tk.call('tk', 'scaling', 1.5)  # Adjusts the scaling factor
+
+    # Define fonts
+    label_font = tkfont.Font(family='Helvetica', size=14, weight='bold')
+    entry_font = tkfont.Font(family='Helvetica', size=12)
+    button_font = tkfont.Font(family='Helvetica', size=12, weight='bold')
+
+    # def on_submit(event=None):  # Allow the function to be called with an event
+    #     user_query = entry.get()
+    #     top_n = top_n_spinbox.get()  # Get the value from the spinbox
+    #     if user_query:
+    #         url = 'http://localhost:5000/find_matching_tab'
+    #         response = requests.post(url, json={"query": user_query, "top_n": top_n})
+    #         result_label.config(text=f"Response: {response.text}")
+    #     entry.delete(0, tk.END)  # Clear the entry after submitting
+    # def on_submit(event=None):
+    #     """Handle the submission of the query and the selection of results."""
+    #     user_query = entry.get()
+    #     top_n = top_n_spinbox.get()  # Get the value from the spinbox
+    #     if user_query:
+    #         url = 'http://localhost:5000/find_matching_tab'
+    #         response = requests.post(url, json={"query": user_query, "top_n": top_n})
+    #         response_data = response.json()
+            
+    #         # Clear previous results
+    #         for widget in results_frame.winfo_children():
+    #             widget.destroy()
+            
+    #         if response_data['status'] == 'success':
+    #             # Check if there are multiple results
+    #             if 'results' in response_data:
+    #                 for result in response_data['results']:
+    #                     btn = tk.Button(results_frame, text=f"{result['title']}",
+    #                                     command=lambda r=result: select_result(r))
+    #                     btn.pack()
+    #             else:
+    #                 result_label.config(text=f"Response: {response_data['message']}")
+    #         else:
+    #             result_label.config(text=f"Error: {response_data['message']}")
+            
+    #         entry.delete(0, tk.END)  # Clear the entry after submitting
+    def on_submit(event=None):
+        """Handle the submission of the query and the selection of results."""
+        user_query = entry.get()
+        top_n = top_n_spinbox.get()  # Get the value from the spinbox
+        if user_query:
+            url = 'http://localhost:5000/find_matching_tab'
+            response = requests.post(url, json={"query": user_query, "top_n": top_n})
+            response_data = response.json()
+            
+            # Clear previous results
+            for widget in results_frame.winfo_children():
+                widget.destroy()
+            
+            if response_data['status'] == 'success':
+                # Check if there are multiple results
+                if 'results' in response_data:
+                    for result in response_data['results']:
+                        btn = tk.Button(results_frame, text=f"{result['title']}",
+                                        command=lambda r=result: select_result(r))
+                        btn.pack()
+                else:
+                    result_label.config(text=f"Response: {response_data['message']}")
+
+                print("doing")
+                results_frame.pack_propagate(True)  # Allow frame to shrink
+                result_label.config(text=f"Response: {response_data['message']}")
+                results_frame.config(height=1)  # Set to minimal height when there are no results
+            else:
+                results_frame.pack_propagate(True)  # Allow frame to shrink
+                result_label.config(text=f"Error: {response_data['message']}")
+                results_frame.config(height=1)  # Set to minimal height on error
+
+
+            # else:
+            #     result_label.config(text=f"Error: {response_data['message']}")
+            
+            entry.delete(0, tk.END)  # Clear the entry after submitting
+
+
+
+    def select_result(result):
+        """Handle the selection of a result to emit its data."""
+        print("Selected Result:", result)
+        url = 'http://localhost:5000/selected_n_activate'
+        response = requests.post(url, json={"title": result['title'], "tabId": result['tabId']})
+    
+        print(response.json())
+
+
+
+
+
+    def on_close(flask_pid, keyboard_listener_pid, root):
+        print("Stopping Flask app and optional keyboard listener...")
+        os.kill(flask_pid, signal.SIGINT)  # Send SIGINT to Flask app
+        if keyboard_listener_pid:
+            os.kill(keyboard_listener_pid, signal.SIGTERM)  # Optionally kill the keyboard listener
+        root.destroy()  # Close the GUI
+
+    # Layout management
+    input_frame = tk.Frame(root)
+    input_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+
+    # Setup the results frame in your GUI
+    results_frame = tk.Frame(root)
+    results_frame.pack(fill='both', expand=True)
+
+
+    tk.Label(input_frame, text="Enter your query:", font=label_font).pack(side=tk.LEFT)
+
+    entry = tk.Entry(input_frame, font=entry_font, width=50)
+    entry.pack(side=tk.LEFT, padx=5)
+    entry.focus_set()  # Set focus on the entry widget
+    entry.bind("<Return>", on_submit)  # Bind the Enter key to the submit function
+
+    submit_button = tk.Button(input_frame, text="Submit", command=on_submit, font=button_font)
+    submit_button.pack(side=tk.LEFT, padx=5)
+
+    # Top N selection
+    top_n_frame = tk.Frame(root)
+    top_n_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+
+    tk.Label(top_n_frame, text="Top N:", font=label_font).pack(side=tk.LEFT)
+    top_n_spinbox = tk.Spinbox(top_n_frame, from_=1, to=10, width=5, font=entry_font)
+    top_n_spinbox.pack(side=tk.LEFT, padx=5)
+
+    result_label = tk.Label(root, text="", font=label_font)
+    result_label.pack(pady=5)
+
+    root.protocol("WM_DELETE_WINDOW", lambda: on_close(flask_pid, keyboard_listener_pid, root))
+    root.mainloop()
+
+
+
+
+# Main entry point to launch the Flask app with command-line arguments for CUDA and GUI mode
+def main(use_cuda, use_gui, keyboard_listener_pid=None):
+
+    print(f"Running with {'GPU support' if use_cuda else 'CPU only'}.")
+    init_lang_components(use_cuda)
+
+    if use_gui:
+        print("GUI mode enabled.")
+        # Run the GUI in a separate thread
+        gui_thread = Thread(target=run_gui, args=(os.getpid(), keyboard_listener_pid))
+        gui_thread.start()
+    else:
+        print("Hotkeys mode enabled.")
+
+    app.run(port=5000, debug=True, use_reloader=False)
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    parser = argparse.ArgumentParser(description='Run the Flask app with optional CUDA and GUI support.')
+    parser.add_argument('--cuda', action='store_true', help='Enable CUDA support for GPU processing.')
+    parser.add_argument('--gui', action='store_true', help='Enable GUI mode instead of hotkeys interaction.')
+    parser.add_argument('--keyboard_listener_pid', default=None, help='PID of the keyboard listener process, if any.')
+
+    args = parser.parse_args()
+    
+    if args.keyboard_listener_pid == 'None':
+        args.keyboard_listener_pid = None
+    print("main pid is ", os.getpid())
+    # print the args
+    print(args)
+    main(args.cuda, args.gui, args.keyboard_listener_pid)
