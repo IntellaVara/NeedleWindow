@@ -4,7 +4,7 @@
 const processedUrls = new Map();
 
 // Assuming the Socket.IO client is loaded from `socket.io.min.js` as configured in `manifest.json`
-var socket = io('http://localhost:5000', {transports: ['websocket'], upgrade: false});
+var socket = io('http://localhost:5000/firefox', {transports: ['websocket'], upgrade: false});
 
 socket.on('connect', function() {
     console.log('WebSocket connection established');
@@ -69,7 +69,9 @@ socket.on('request_tabs', function(data) {
 //     }).catch(err => console.error('Error querying tabs:', err));
 // });
 
+
 socket.on('activate_matching_tab', function(data) {
+    console.log("here")
     console.log("Attempting to activate matching tab with ID:", data.tabId);
     browser.tabs.query({}).then(tabs => {
         console.log("All open tab titles and IDs:");
@@ -123,6 +125,7 @@ browser.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
             if (!processedUrls.has(key)) {
                 console.log(`Processing PDF in tab ID ${tabId} with URL ${tab.url}`);
                 const pageInfo = {
+                    browser: 'firefox',
                     type: 'pdf',
                     url: tab.url,
                     title: tab.title,
@@ -139,6 +142,7 @@ browser.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
                     if (results && results[0]) {
                         const pageHTML = results[0];
                         const pageInfo = {
+                            browser: 'firefox',
                             type: 'html',
                             url: tab.url,
                             html: pageHTML,

@@ -6,6 +6,8 @@ from flask_socketio import SocketIO, emit
 import subprocess
 import re 
 from bs4 import BeautifulSoup  # Import BeautifulSoup
+
+
 from threading import Thread
 
 import signal
@@ -27,11 +29,18 @@ from pydantic import BaseModel, Field
 import json
 import sys
 
+import logging
+
+# Set up basic configuration
+logging.basicConfig(level=logging.WARNING)  # Options are DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
+#socketio = SocketIO(app, cors_allowed_origins="*")
+
+
 
 def signal_handler(sig, frame):
     print('Signal received:', sig)
@@ -68,6 +77,7 @@ def receive_page_data():
     print("Firing receive_page_data")
     try:
         data = request.get_json()
+        browser = data['browser']
         page_type = data['type']
         tab_id = data['tabId']
         url = data['url']
@@ -76,7 +86,7 @@ def receive_page_data():
         print("page_type:", page_type)
         
         # Initialize page content string
-        page_content = f"<id>{tab_id}</id>\n"
+        page_content = f"<id>{browser}_{tab_id}</id>\n"
         
         if page_type == 'html':
             html_content = data['html']
@@ -133,14 +143,18 @@ def receive_page_data():
             pdf_text_combined = '\n\n'.join(filter(None, pdf_text))
             pdf_title = data.get('title', 'PDF Document')
             page_content += f"<title>{pdf_title}</title>\n{pdf_text_combined}\n"
-            page_content += f"<id>{tab_id}</id>\n"
+            page_content += f"<id>{browser}_{tab_id}</id>\n"
 
+
+        
 
         # Add the content to the vector store with the tab ID as identifier
-        vector_store.add_texts([page_content], ids=[str(tab_id)])
+        vector_store.add_texts([page_content], ids=[f"{browser}_"+str(tab_id)])
 
+        
+        print("Found browser:", browser)
         # Append the formatted page content string to a local data store
-        pages_data[str(tab_id)] = page_content
+        pages_data[f"{browser}_"+str(tab_id)] = page_content
 
         print(f"Total pages received: {len(pages_data)}")
         print(f"Recently added page content with Tab ID {tab_id}:\n", page_content)
@@ -169,20 +183,33 @@ def handle_remove_tab(data):
 
     
 
-@socketio.on('connect')
+@socketio.on('connect', namespace='/firefox')
 def handle_connect():
-    print('Client Connected')
-    emit('server_response', {'message': 'Hello from Flask!'})
+    print('Firefox client connected')
+    emit('server_response', {'message': 'Hello from Flask to Firefox!'}, namespace='/firefox')
     
-
-@socketio.on('disconnect')
+@socketio.on('disconnect', namespace='/firefox')
 def handle_disconnect():
-    print('Client Disconnected')
-    try:
-        # Perform necessary cleanup
-        print('Performed cleanup after disconnection.')
-    except Exception as e:
-        print(f'Error during disconnect: {str(e)}')
+    print('Firefox client disconnected')
+
+@socketio.on('connect', namespace='/chrome')
+def handle_connect_chrome():
+    print('Chrome client connected')
+    emit('server_response', {'message': 'Hello from Flask to Chrome!'}, namespace='/chrome')
+
+@socketio.on('disconnect', namespace='/chrome')
+def handle_disconnect_chrome():
+    print('Chrome client disconnected')
+    # Perform any necessary cleanup or actions
+
+# @socketio.on('disconnect')
+# def handle_disconnect():
+#     print('Client Disconnected')
+#     try:
+#         # Perform necessary cleanup
+#         print('Performed cleanup after disconnection.')
+#     except Exception as e:
+#         print(f'Error during disconnect: {str(e)}')
 
 
 @socketio.on('client_message')
@@ -216,7 +243,7 @@ def activate_first_tab():
     return "Command to activate first tab and focus window sent."
 
 
-@socketio.on('window_info')
+@socketio.on('window_info', namespace='/firefox')
 def handle_window_info(data):
     print("Received window info:", data)
     window_id = data['windowId']  # Assuming the window ID is directly usable
@@ -225,6 +252,16 @@ def handle_window_info(data):
         result = focus_firefox_window_by_title(data['title'])
         print(result)
    
+
+@socketio.on('window_info_chrome', namespace='/chrome')
+def handle_window_info_chrome(data):
+    print("HANDLING CHROME WINDOW INFO!!")
+    print("Received window info (Chrome):", data)
+    window_id = data['windowId']  # Assuming the window ID is directly usable
+    print(f"Window ID is {window_id}")
+    if 'title' in data:
+        result = focus_chrome_window_by_title(data['title'])
+        print(f"Focus result for Chrome: {result}")
 
 
 # @app.route('/find_matching_tab', methods=['POST'])
@@ -270,10 +307,22 @@ def selected_n_activate():
     data = request.get_json()
     title = data.get('title')
     tab_id = data.get('tabId')
+
     print(f"Activating tab with ID: {tab_id} and title: {title}")
+    browser = tab_id.split('_')[0]
+    tab_id = tab_id.split('_')[1]
+
+    print(f"Activating tab in {browser} with ID: {tab_id} and title: {title}")
     
-    # Emit the command to activate the matching tab
-    socketio.emit('activate_matching_tab', {'title': title, 'tabId': tab_id})
+    
+    # Emit the command to activate the matching tab based on the browser
+    if browser == 'firefox':
+        socketio.emit('activate_matching_tab', {'title': title, 'tabId': tab_id}, namespace='/firefox')
+    elif browser == 'chrome':
+        socketio.emit('activate_matching_tab', {'title': title, 'tabId': tab_id}, namespace='/chrome')
+    else:
+        print(f"Unsupported browser: {browser}")
+        return jsonify({"status": "error", "message": f"Unsupported browser: {browser}"})
     
     return jsonify({"status": "success", "message": "Activation attempt sent."})
 
@@ -294,8 +343,11 @@ def find_matching_tab():
             # Handle multiple results for GUI display
             results = []
             for result in search_results:
-                tab_id_match = re.search(r'<id>(\d+)</id>\s*$', result.page_content, re.MULTILINE)
+                print("Result:", result)
+                tab_id_match = re.search(r'<id>([a-zA-Z0-9_]+)</id>\s*$', result.page_content, re.MULTILINE)
                 title_match = re.search(r'<title>(.*?)</title>\s*$', result.page_content, re.MULTILINE)
+
+                print("id match?", tab_id_match)
                 if tab_id_match and title_match:
                     results.append({'tabId': tab_id_match.group(1), 'title': title_match.group(1)})
             return jsonify({"status": "success", "results": results}), 200
@@ -303,7 +355,7 @@ def find_matching_tab():
             # Handle single result for direct activation
             if search_results:
                 top_result = search_results[0]
-                tab_id_match = re.search(r'<id>(\d+)</id>\s*$', top_result.page_content, re.MULTILINE)
+                tab_id_match = re.search(r'<id>([a-zA-Z0-9_]+)</id>\s*$', result.page_content, re.MULTILINE)
                 title_match = re.search(r'<title>(.*?)</title>\s*$', top_result.page_content, re.MULTILINE)
                 if tab_id_match and title_match:
                     tab_id = tab_id_match.group(1)
@@ -319,9 +371,8 @@ def find_matching_tab():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+
 def focus_firefox_window_by_title(title_from_extension):
-
-
     try:
         # Retrieve all Firefox windows with their titles
         output = subprocess.check_output(
@@ -342,6 +393,35 @@ def focus_firefox_window_by_title(title_from_extension):
         return f"Failed to execute xdotool command: {str(e)}", 500
     except Exception as e:
         return f"Error: {str(e)}", 500
+
+
+
+def focus_chrome_window_by_title(title_from_extension):
+    try:
+        # Retrieve all Chrome windows with their titles
+        output = subprocess.check_output(
+            "xdotool search --onlyvisible --class 'google-chrome' | xargs -I % sh -c 'echo \"%,$(xdotool getwindowname %)\"'",
+            shell=True
+        ).decode()
+
+        # Process the output to find a matching window
+        for line in output.splitlines():
+            window_id, window_title = line.split(",", 1)
+
+            # print title from extension and window title
+            print("title from extension", title_from_extension)
+            print("window_title", window_title)
+            # Check if the window title from extension matches the one retrieved by xdotool
+            if title_from_extension in window_title:
+                print(f"Matching window found: {window_id}, focusing now.")
+                subprocess.run(['xdotool', 'windowactivate', window_id])
+                return f"Focused window with ID: {window_id}"
+        return "No matching window found."
+    except subprocess.CalledProcessError as e:
+        return f"Failed to execute xdotool command: {str(e)}", 500
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
 
 
 def run_gui(flask_pid, keyboard_listener_pid=None):
@@ -395,6 +475,7 @@ def run_gui(flask_pid, keyboard_listener_pid=None):
     #             result_label.config(text=f"Error: {response_data['message']}")
             
     #         entry.delete(0, tk.END)  # Clear the entry after submitting
+
     def on_submit(event=None):
         """Handle the submission of the query and the selection of results."""
         user_query = entry.get()
@@ -418,9 +499,10 @@ def run_gui(flask_pid, keyboard_listener_pid=None):
                 else:
                     result_label.config(text=f"Response: {response_data['message']}")
 
-                print("doing")
+                #print("doing")
+                #print("response data keys", response_data.keys())
                 results_frame.pack_propagate(True)  # Allow frame to shrink
-                result_label.config(text=f"Response: {response_data['message']}")
+                #result_label.config(text=f"Response: {response_data['message']}")
                 results_frame.config(height=1)  # Set to minimal height when there are no results
             else:
                 results_frame.pack_propagate(True)  # Allow frame to shrink
@@ -504,6 +586,8 @@ def main(use_cuda, use_gui, keyboard_listener_pid=None):
     else:
         print("Hotkeys mode enabled.")
 
+    #socketio.run(app, port=5000, debug=True, use_reloader=False)
+    #socketio.run(app, host='127.0.0.1', port=5000, debug=True, use_reloader=False, ssl_context=('localhost.crt', 'localhost.key'), allow_unsafe_werkzeug=True)
     app.run(port=5000, debug=True, use_reloader=False)
 
 if __name__ == '__main__':
